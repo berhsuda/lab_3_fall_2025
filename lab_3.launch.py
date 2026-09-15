@@ -22,9 +22,18 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 import os
+import platform
 
 
 def generate_launch_description():
+    # On macOS the real robot's control_board_hardware_interface can't be
+    # built (it needs Linux-only SPI headers), so simulate with Mujoco
+    # instead. Anywhere else (the robot's Raspberry Pi), use real hardware.
+    if platform.system() == "Darwin":
+        urdf_xacro_file = "pupper_v3_mujoco.urdf.xacro"
+    else:
+        urdf_xacro_file = "pupper_v3.urdf.xacro"
+
     # Get URDF via xacro
     robot_description_content = Command(
         [
@@ -34,7 +43,7 @@ def generate_launch_description():
                 [
                     FindPackageShare("pupper_v3_description"),
                     "description",
-                    "pupper_v3.urdf.xacro",
+                    urdf_xacro_file,
                 ]
             ),
         ]
@@ -47,9 +56,12 @@ def generate_launch_description():
             "lab_3.yaml",
         ]
     )
-    # rviz_config_file = PathJoinSubstitution(
-    #     [FindPackageShare("ros2_control_demo_example_1"), "rviz", "rrbot.rviz"]
-    # )
+    rviz_config_file = PathJoinSubstitution(
+        [
+            os.path.dirname(__file__),
+            "lab_3.rviz",
+        ]
+    )
 
     control_node = Node(
         package="controller_manager",
@@ -63,13 +75,13 @@ def generate_launch_description():
         output="both",
         parameters=[robot_description],
     )
-    # rviz_node = Node(
-    #     package="rviz2",
-    #     executable="rviz2",
-    #     name="rviz2",
-    #     output="log",
-    #     arguments=["-d", rviz_config_file],
-    # )
+    rviz_node = Node(
+        package="rviz2",
+        executable="rviz2",
+        name="rviz2",
+        output="log",
+        arguments=["-d", rviz_config_file],
+    )
 #    joy_node = Node(
 #        package="joy_linux",
 #        executable="joy_linux_node",
@@ -95,12 +107,12 @@ def generate_launch_description():
     )
 
     # Delay rviz start after `joint_state_broadcaster`
-    # delay_rviz_after_joint_state_broadcaster_spawner = RegisterEventHandler(
-    #     event_handler=OnProcessExit(
-    #         target_action=joint_state_broadcaster_spawner,
-    #         on_exit=[rviz_node],
-    #     )
-    # )
+    delay_rviz_after_joint_state_broadcaster_spawner = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=joint_state_broadcaster_spawner,
+            on_exit=[rviz_node],
+        )
+    )
 
     # delay_joint_state_broadcaster_spawner_after_control_node = RegisterEventHandler(
     #     event_handler=OnProcessExit(
@@ -123,7 +135,7 @@ def generate_launch_description():
         robot_state_pub_node,
         joint_state_broadcaster_spawner,
         imu_sensor_broadcaster_spawner,
-        # delay_rviz_after_joint_state_broadcaster_spawner,
+        delay_rviz_after_joint_state_broadcaster_spawner,
         delay_robot_controller_spawner_after_joint_state_broadcaster_spawner,
     ]
 
